@@ -1,0 +1,357 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private user account profile containing PII, tracking mode, currency preference, and active group pointer.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth user UID."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 254,
+          "description": "User email address (private PII)."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "Display name shown to the user and synced to group memberships."
+        },
+        "avatarColor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20,
+          "description": "Selected pastel theme color key."
+        },
+        "avatarKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20,
+          "description": "Selected mascot buddy icon key."
+        },
+        "trackingMode": {
+          "type": "string",
+          "enum": ["individual", "group", "unset"],
+          "description": "Whether the user is tracking individually, in a group, or hasn't finished onboarding."
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["INR", "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD"],
+          "description": "Preferred ISO currency code (defaults to INR)."
+        },
+        "activeGroupId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Currently active group ID, or empty string if individual/none."
+        },
+        "dailyBudgetCents": {
+          "type": "integer",
+          "description": "Personal daily spending budget in minor currency units (paise/cents)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "uid",
+        "email",
+        "displayName",
+        "avatarColor",
+        "avatarKey",
+        "trackingMode",
+        "currency",
+        "activeGroupId",
+        "dailyBudgetCents",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Group": {
+      "title": "Group",
+      "description": "Shared friends or family accountability group.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Unique group identifier."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50,
+          "description": "Friendly group name."
+        },
+        "inviteCode": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 12,
+          "pattern": "^[A-Z0-9]+$",
+          "description": "Shareable uppercase invite code."
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["INR", "USD", "EUR", "GBP", "AED", "SGD", "AUD", "CAD"],
+          "description": "Shared group ISO currency code."
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the user who created the group."
+        },
+        "memberIds": {
+          "type": "array",
+          "description": "Bounded list of current member UIDs (max 25)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "inviteCode",
+        "currency",
+        "createdBy",
+        "memberIds",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "GroupInvite": {
+      "title": "GroupInvite",
+      "description": "Direct invite code lookup record so invitees can resolve a group ID without listing groups.",
+      "type": "object",
+      "properties": {
+        "inviteCode": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 12,
+          "pattern": "^[A-Z0-9]+$",
+          "description": "Invite code matching the document ID."
+        },
+        "groupId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Target group ID."
+        },
+        "groupName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50,
+          "description": "Target group name."
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the creator."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        }
+      },
+      "required": [
+        "inviteCode",
+        "groupId",
+        "groupName",
+        "createdBy",
+        "createdAt"
+      ]
+    },
+    "GroupMember": {
+      "title": "GroupMember",
+      "description": "Public within-group member card containing non-PII budget and display info.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Member user UID."
+        },
+        "groupId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Parent group ID."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "Member display name."
+        },
+        "avatarColor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20,
+          "description": "Pastel avatar color key."
+        },
+        "avatarKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20,
+          "description": "Mascot buddy icon key."
+        },
+        "dailyBudgetCents": {
+          "type": "integer",
+          "description": "Personal daily budget in integer minor units."
+        },
+        "joinedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when member joined."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "uid",
+        "groupId",
+        "displayName",
+        "avatarColor",
+        "avatarKey",
+        "dailyBudgetCents",
+        "joinedAt",
+        "updatedAt"
+      ]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Individual daily expense entry logged in a group or solo tracker.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Unique expense ID."
+        },
+        "groupId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Parent group ID, or empty string for personal solo expenses."
+        },
+        "authorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the member who logged this expense."
+        },
+        "authorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "Snapshot display name of the author."
+        },
+        "amountCents": {
+          "type": "integer",
+          "description": "Expense amount in positive integer minor units (1 to 100000000)."
+        },
+        "category": {
+          "type": "string",
+          "enum": ["coffee", "meals", "groceries", "transit", "fun", "home", "health", "other"],
+          "description": "Expense category identifier."
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Optional short note."
+        },
+        "dateKey": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "Local calendar date key in YYYY-MM-DD format."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": [
+        "id",
+        "groupId",
+        "authorId",
+        "authorName",
+        "amountCents",
+        "category",
+        "note",
+        "dateKey",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Owner-only private user profile storing email, currency, mode, and active group reference."
+    },
+    "/users/{userId}/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/Expense" },
+      "description": "Private expenses logged by the user when in individual mode."
+    },
+    "/groups/{groupId}": {
+      "schema": { "$ref": "#/entities/Group" },
+      "description": "Shared friends/family group metadata with bounded memberIds."
+    },
+    "/groupInvites/{inviteCode}": {
+      "schema": { "$ref": "#/entities/GroupInvite" },
+      "description": "Direct invite code lookup mapping uppercase inviteCode to groupId."
+    },
+    "/groups/{groupId}/members/{memberId}": {
+      "schema": { "$ref": "#/entities/GroupMember" },
+      "description": "Non-PII member profile and personal daily budget within a group."
+    },
+    "/groups/{groupId}/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/Expense" },
+      "description": "Expenses logged by members of the group."
+    }
+  }
+}

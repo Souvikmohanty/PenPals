@@ -1,0 +1,350 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net: deny all access by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ---- Global Hardened Primitives ----
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidInviteCode(code) {
+      return code is string && code.size() >= 6 && code.size() <= 12 && code.matches('^[A-Z0-9]+$');
+    }
+
+    function isValidCurrency(curr) {
+      return curr is string && curr in ['INR', 'USD', 'EUR', 'GBP', 'AED', 'SGD', 'AUD', 'CAD'];
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isGroupMember(groupId) {
+      return exists(/databases/$(database)/documents/groups/$(groupId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
+    }
+
+    function isGroupMemberAfter(groupId) {
+      return existsAfter(/databases/$(database)/documents/groups/$(groupId)) &&
+        request.auth.uid in getAfter(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
+    }
+
+    // ---- Validation Blueprints ----
+    function isValidUser(data, userId) {
+      return data.keys().hasAll([
+          'uid', 'email', 'displayName', 'avatarColor', 'avatarKey',
+          'trackingMode', 'currency', 'activeGroupId', 'dailyBudgetCents', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid', 'email', 'displayName', 'avatarColor', 'avatarKey',
+          'trackingMode', 'currency', 'activeGroupId', 'dailyBudgetCents', 'createdAt', 'updatedAt'
+        ]) &&
+        data.uid == userId &&
+        isValidId(data.uid) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
+        data.avatarColor is string && data.avatarColor.size() >= 1 && data.avatarColor.size() <= 20 &&
+        data.avatarKey is string && data.avatarKey.size() >= 1 && data.avatarKey.size() <= 20 &&
+        data.trackingMode is string && data.trackingMode in ['individual', 'group', 'unset'] &&
+        isValidCurrency(data.currency) &&
+        data.activeGroupId is string && data.activeGroupId.size() <= 128 &&
+        (data.activeGroupId == '' || isValidId(data.activeGroupId)) &&
+        data.dailyBudgetCents is int && data.dailyBudgetCents >= 100 && data.dailyBudgetCents <= 100000000 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidGroup(data, groupId) {
+      return data.keys().hasAll([
+          'id', 'name', 'inviteCode', 'currency', 'createdBy', 'memberIds', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'name', 'inviteCode', 'currency', 'createdBy', 'memberIds', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id == groupId &&
+        isValidId(data.id) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 50 &&
+        isValidInviteCode(data.inviteCode) &&
+        isValidCurrency(data.currency) &&
+        isValidId(data.createdBy) &&
+        data.memberIds is list && data.memberIds.size() <= 25 &&
+        (data.memberIds.size() == 0 || data.memberIds[0] is string) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidGroupInvite(data, inviteCode) {
+      return data.keys().hasAll(['inviteCode', 'groupId', 'groupName', 'createdBy', 'createdAt']) &&
+        data.keys().hasOnly(['inviteCode', 'groupId', 'groupName', 'createdBy', 'createdAt']) &&
+        data.inviteCode == inviteCode &&
+        isValidInviteCode(data.inviteCode) &&
+        isValidId(data.groupId) &&
+        data.groupName is string && data.groupName.size() >= 1 && data.groupName.size() <= 50 &&
+        data.createdBy == request.auth.uid &&
+        isValidId(data.createdBy) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidMember(data, groupId, memberId) {
+      return data.keys().hasAll([
+          'uid', 'groupId', 'displayName', 'avatarColor', 'avatarKey',
+          'dailyBudgetCents', 'joinedAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid', 'groupId', 'displayName', 'avatarColor', 'avatarKey',
+          'dailyBudgetCents', 'joinedAt', 'updatedAt'
+        ]) &&
+        data.uid == memberId &&
+        isValidId(data.uid) &&
+        data.groupId == groupId &&
+        isValidId(data.groupId) &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
+        data.avatarColor is string && data.avatarColor.size() >= 1 && data.avatarColor.size() <= 20 &&
+        data.avatarKey is string && data.avatarKey.size() >= 1 && data.avatarKey.size() <= 20 &&
+        data.dailyBudgetCents is int && data.dailyBudgetCents >= 100 && data.dailyBudgetCents <= 100000000 &&
+        data.joinedAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidExpenseBody(data, expenseId, expectedGroupId) {
+      return data.keys().hasAll([
+          'id', 'groupId', 'authorId', 'authorName', 'amountCents',
+          'category', 'note', 'dateKey', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'groupId', 'authorId', 'authorName', 'amountCents',
+          'category', 'note', 'dateKey', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id == expenseId &&
+        isValidId(data.id) &&
+        data.groupId == expectedGroupId &&
+        isValidId(data.authorId) &&
+        data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 60 &&
+        data.amountCents is int && data.amountCents >= 1 && data.amountCents <= 100000000 &&
+        data.category is string &&
+        data.category in ['coffee', 'meals', 'groceries', 'transit', 'fun', 'home', 'health', 'other'] &&
+        data.note is string && data.note.size() <= 120 &&
+        data.dateKey is string && data.dateKey.size() == 10 &&
+        data.dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // ---- Users (Private PII & Solo Expenses) ----
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && isOwner(userId);
+      allow list: if false;
+
+      allow create: if isVerified() &&
+        isValidId(userId) &&
+        isOwner(userId) &&
+        isValidUser(incoming(), userId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerified() &&
+        isValidId(userId) &&
+        isOwner(userId) &&
+        isValidUser(incoming(), userId) &&
+        incoming().uid == existing().uid &&
+        incoming().email == existing().email &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName', 'avatarColor', 'avatarKey', 'trackingMode',
+          'currency', 'activeGroupId', 'dailyBudgetCents', 'updatedAt'
+        ]);
+
+      allow delete: if false;
+
+      // ---- Personal Individual Expenses ----
+      match /expenses/{expenseId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(expenseId) && isOwner(userId);
+        allow list: if isSignedIn() && isValidId(userId) && isOwner(userId);
+
+        allow create: if isVerified() &&
+          isValidId(userId) &&
+          isValidId(expenseId) &&
+          isOwner(userId) &&
+          isValidExpenseBody(incoming(), expenseId, '') &&
+          incoming().authorId == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+
+        allow update: if isVerified() &&
+          isValidId(userId) &&
+          isValidId(expenseId) &&
+          isOwner(userId) &&
+          isValidExpenseBody(incoming(), expenseId, '') &&
+          existing().authorId == request.auth.uid &&
+          incoming().id == existing().id &&
+          incoming().groupId == existing().groupId &&
+          incoming().authorId == existing().authorId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'amountCents', 'category', 'note', 'dateKey', 'authorName', 'updatedAt'
+          ]);
+
+        allow delete: if isVerified() &&
+          isValidId(userId) &&
+          isValidId(expenseId) &&
+          isOwner(userId);
+      }
+    }
+
+    // ---- Invite Code Lookups ----
+    match /groupInvites/{inviteCode} {
+      allow get: if isSignedIn() && isValidInviteCode(inviteCode);
+      allow list: if false;
+
+      allow create: if isVerified() &&
+        isValidInviteCode(inviteCode) &&
+        isValidGroupInvite(incoming(), inviteCode) &&
+        incoming().createdAt == request.time &&
+        existsAfter(/databases/$(database)/documents/groups/$(incoming().groupId));
+
+      allow update, delete: if false;
+    }
+
+    // ---- Groups ----
+    match /groups/{groupId} {
+      allow get: if isSignedIn() && isValidId(groupId) && request.auth.uid in existing().memberIds;
+      allow list: if isSignedIn() && request.auth.uid in existing().memberIds;
+
+      allow create: if isVerified() &&
+        isValidId(groupId) &&
+        isValidGroup(incoming(), groupId) &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().memberIds == [request.auth.uid] &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        existsAfter(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)) &&
+        existsAfter(/databases/$(database)/documents/groupInvites/$(incoming().inviteCode));
+
+      allow update: if isVerified() &&
+        isValidId(groupId) &&
+        isValidGroup(incoming(), groupId) &&
+        incoming().id == existing().id &&
+        incoming().inviteCode == existing().inviteCode &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          // Action: Join group
+          (
+            !(request.auth.uid in existing().memberIds) &&
+            request.auth.uid in incoming().memberIds &&
+            incoming().memberIds.size() == existing().memberIds.size() + 1 &&
+            incoming().memberIds.hasAll(existing().memberIds) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['memberIds', 'updatedAt']) &&
+            existsAfter(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid))
+          ) ||
+          // Action: Leave group
+          (
+            request.auth.uid in existing().memberIds &&
+            !(request.auth.uid in incoming().memberIds) &&
+            existing().memberIds.hasAll(incoming().memberIds) &&
+            incoming().memberIds.size() == existing().memberIds.size() - 1 &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['memberIds', 'updatedAt'])
+          ) ||
+          // Action: Rename group or update group currency (any current member, equal permissions)
+          (
+            request.auth.uid in existing().memberIds &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'currency', 'updatedAt'])
+          )
+        );
+
+      allow delete: if false;
+
+      // ---- Group Members ----
+      match /members/{memberId} {
+        allow get: if isSignedIn() && isValidId(groupId) && isValidId(memberId) && isGroupMember(groupId);
+        allow list: if isSignedIn() && isValidId(groupId) && isGroupMember(groupId);
+
+        allow create: if isVerified() &&
+          isValidId(groupId) &&
+          isValidId(memberId) &&
+          isOwner(memberId) &&
+          isValidMember(incoming(), groupId, memberId) &&
+          incoming().joinedAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isGroupMemberAfter(groupId);
+
+        allow update: if isVerified() &&
+          isValidId(groupId) &&
+          isValidId(memberId) &&
+          isOwner(memberId) &&
+          isGroupMember(groupId) &&
+          isValidMember(incoming(), groupId, memberId) &&
+          incoming().uid == existing().uid &&
+          incoming().groupId == existing().groupId &&
+          incoming().joinedAt == existing().joinedAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'displayName', 'avatarColor', 'avatarKey', 'dailyBudgetCents', 'updatedAt'
+          ]);
+
+        allow delete: if isVerified() &&
+          isValidId(groupId) &&
+          isValidId(memberId) &&
+          isOwner(memberId);
+      }
+
+      // ---- Group Expenses ----
+      match /expenses/{expenseId} {
+        allow get: if isSignedIn() && isValidId(groupId) && isValidId(expenseId) && isGroupMember(groupId);
+        allow list: if isSignedIn() && isValidId(groupId) && isGroupMember(groupId);
+
+        allow create: if isVerified() &&
+          isValidId(groupId) &&
+          isValidId(expenseId) &&
+          isValidExpenseBody(incoming(), expenseId, groupId) &&
+          incoming().authorId == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isGroupMember(groupId);
+
+        allow update: if isVerified() &&
+          isValidId(groupId) &&
+          isValidId(expenseId) &&
+          isValidExpenseBody(incoming(), expenseId, groupId) &&
+          existing().authorId == request.auth.uid &&
+          incoming().id == existing().id &&
+          incoming().groupId == existing().groupId &&
+          incoming().authorId == existing().authorId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'amountCents', 'category', 'note', 'dateKey', 'authorName', 'updatedAt'
+          ]) &&
+          isGroupMember(groupId);
+
+        allow delete: if isVerified() &&
+          isValidId(groupId) &&
+          isValidId(expenseId) &&
+          existing().authorId == request.auth.uid &&
+          isGroupMember(groupId);
+      }
+    }
+  }
+}
